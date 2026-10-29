@@ -1,0 +1,319 @@
+---
+title: "Project Part 1" 
+fontsize: 12pt
+geometry: margin=1in
+urlcolor: black
+output: pdf_document
+header-includes:
+- \usepackage{setspace}
+- \onehalfspacing
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.width = 7, fig.height = 5, out.height = "40%", 
+                      echo = TRUE, highlight = FALSE)
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+library(tidyverse) # data wrangling and visualization
+library(haven) # reading in XPT file
+library(tinytex) # LaTeX support
+library(fishualize)
+
+brfss_original <- read_xpt("LLCP2025.XPT")
+
+# selecting columns for BMI, BMI category, smoking status, sleep per night, exercise
+brfss <- brfss_original |>
+  select(`_BMI5`, `_BMI5CAT`, `_SMOKER3`, SLEPTIM1, EXERANY2) |>
+  rename(bmi = `_BMI5`, bmi_cat = `_BMI5CAT`, smoker = `_SMOKER3`, sleep = SLEPTIM1, exercise = EXERANY2)
+
+# adding decimals to BMI
+brfss$bmi <- brfss$bmi / 100
+
+# labels for BMI category
+brfss$bmi_cat <- factor(brfss$bmi_cat, levels = c(1,2,3,4), labels = c("Underweight", "Normal", "Overweight", "Obese"))
+
+# removing 77 - Don't know and 99 - Refused, adding column to sort patients by category
+brfss$sleep[brfss$sleep > 25] <- NA
+brfss <- brfss |>
+  mutate(sleep7hr = ifelse(is.na(sleep), NA, 
+                           ifelse(sleep < 7, "Less than 7 hours", "7 hours or more")),
+         obesity = ifelse(bmi_cat == "Obese", "Obese", "Not Obese"))
+
+# Removing 9 - Don't know/refused/missing and changing to "Current smoker", "Former smoker", "Never smoked"
+brfss$smoker[brfss$smoker == 9] <- NA
+brfss$smoker[brfss$smoker %in% c(2,3)] <- 1
+brfss$smoker <- factor(brfss$smoker, levels = c(1,4), labels = c("Current or former smoker", "Never smoked"))
+
+# Removed 7 - Don't know/not sure and 9 - Refused, added labels
+brfss$exercise[brfss$exercise %in% c(7,9)] <- NA
+brfss$exercise <- factor(brfss$exercise, levels = c(1,2), labels = c("Yes", "No"))
+```
+
+## 1 - Introduction
+
+Obesity continues to be a significant public health concern within the United States. According to the Centers for Disease Control and Prevention (CDC), about 40.3% of U.S. adults aged 20 and older had obesity between August 2021 and August 2023 (Emmerich et al., 2024). Obesity is associated with several chronic health conditions, including type 2 diabetes, cardiovascular disease, and high blood pressure. While many factors can influence body weight, lifestyle behaviors may be associated with differences in body mass index (BMI) and obesity rates. 
+
+For example, the CDC reported that 30.5% of U.S. adults slept fewer than 7 hours per night on average in 2024 (Ng et al., 2026). Additionally, approximately 11.6% of U.S. adults were current smokers in 2022 (CDC, 2024). This data shows how common certain health behaviors are among U.S. adults and brings awareness to how they are related to obesity. Physical activity is also important to consider because it is a significant factor in weight management, and it raises questions about whether adults who exercise regularly have lower obesity rates than those who are less physically active. Our project aims to examine the relationships between smoking, sleep duration, physical activity, and obesity using data from the CDC’s 2025 Behavioral Risk Factor Surveillance System (BRFSS).
+
+Our three research questions are: 
+
+- Smoking and BMI: Is there a significant difference in mean BMI between adults who currently smoke cigarettes or formerly smoked and adults who have never smoked or? 
+
+  - Parameters: $\mu_1$ represents the population mean BMI of current or former cigarette smokers, while $\mu_2$ represents the population mean BMI of adults who have never smoked. The parameter of interest is the difference $\mu_1 - \mu_2$. 
+
+- Sleep and Obesity: Is there an association between sleep duration (less than 7 hours versus 7 hours or more) and obesity status among adults?
+
+  - Parameters: $p_1$ represents the population proportions of adults classified as obese who sleep less than 7 hours and $p_2$ represents the population proportion of adults classified as obese who sleep 7 hours or more. The parameter of interest is $p_1 - p_2$.
+
+- Exercise and Obesity: Is there a significant difference in the proportion of adults labeled as “obese” between those who participate in physical activity within the past 30 days and those who did not?
+
+  - Parameters: $p_4$ represents the population proportion of adults classifed as obese among those who participated in physical activity outside of work during the past 30 days, and $p_5$ represent the proportion of those who did not. The parameter of interest is the difference $p_4 - p_5$. 
+
+Examining these relationships is important because smoking, sleep, and physical activity are common behaviors that may be associated with differences in BMI and obesity rates. Understanding these patterns could help identify which behaviors are linked to higher obesity rates and provide insight into areas where public health efforts may be beneficial. Although our analysis cannot determine whether these behaviors directly cause obesity, it can help us better understand how they are related among adults in the United States.
+
+## 2 - Data Summary
+
+The data used in this project originates from the CDC’s 2025 Behavioral Risk Factor Surveillance System (BRFSS) which is a nationwide survey that collects information about health conditions and behaviors among adults aged 18 and older. Data was collected throughout 2025 through random digit dialing. For landline interviews, one adult was randomly selected from each household while cellphone interviews were done with the individuals who answered their phones. State health departments conducted the interviews through a standardized questionnaire and participants answered questions about their health and lifestyle behaviors which includes smoking, sleep duration, and physical activity. All responses were self reported with participants providing their own information rather than health data collected through repeated physical examinations. The data set used contains 356,158 responses from 47 states and Washington D.C., Guam, and Puerto Rico according to the CDC.
+
+Before releasing the dataset, the CDC processed the survey responses and created multiple calculated variables to make the data easier to analyze. For instance, the CDC calculated participants' BMI using their self-reported height and weight and classified them into categories such as underweight, normal weight, overweight, and obese. For our analysis, we selected five variables relevant to our research questions which were BMI, BMI category, smoking status, sleep duration, and physical activity. We renamed these variables and divided BMI values by 100 to convert them to their actual numerical values. We also converted BMI categories, smoking status, and physical activity into labeled categorical variables. For smoking status, we combined participants who reported having smoked 100 cigarettes or more in their lifetime as current/former smokers, and never smokers as separate groups. We also created a new categorical variable for sleep duration using participants' reported hours of sleep by separating them into two groups, those who sleep less than 7 hours and those who sleep seven hours or more. This allows us to compare obesity rates between the two groups while keeping the original sleep variable in the data set. Responses indicating that participants were unsure or did not answer certain questions were regarded as missing values including sleep responses above 25, smoking responses coded as 9 and physical activity responses coded as 7 or 9. This prevented invalid responses from affecting future statistical summaries. 
+
+This data set is appropriate for our research questions because it includes information about smoking, sleep duration, physical activity, and BMI for the same participants. For our first question, the data set distinguishes between current cigarette smokers and those who have never smoked allowing us to compare their mean BMI values. For our second question, the survey asks participants how many hours they sleep on average in a 24 hour time frame which allows us to compare obesity rates between adults who sleep less than seven hours and those who sleep seven hours or more. Finally, the data set also includes information about whether participants engage in physical activity outside of work during the past 30 days of the survey which allows us to compare the proportions classified as obese between those who were physically active and those who were not.
+
+## 3 - Data Dictionary
+
+### Variables
+
+- Body Mass Index (BMI) [`bmi` in dataset] is a continuous quantitative variable in kg/m\^2. It takes the $\frac{\text{weight in kilograms}}{[\text{height in meters}]^2}$ of an individual and is used by the CDC to define weight categories.
+
+- BMI Category [`bmi_cat` in dataset] is a categorical variable based on an individual's BMI. There are four categories: Underweight ($\text{BMI} < 18.50$), Normal ($18.50 \leq \text{BMI} < 25.00$), Overweight ($25.00 \leq \text{BMI} < 30.00$), and Obese ($\text{BMI} \geq 30.00$).
+
+- Obesity Status [`obesity` in dataset] is a categorical variable based on BMI category, sorting patients on whether they are "Obese" or "Not Obese".
+
+- Smoking Status [`smoker` in dataset] is a categorical variable based on an individual's reported smoking status. There are two categories: "Current or former smoker" (reported smoking at least 100 cigarettes in their lifetime) and "Never smoked" (those that reported smoking fewer than 100). This variable does not take into consideration e-cigarettes or smokeless nicotine products.
+
+- Hours of Sleep [`sleep` in dataset] is a discrete quantitative variable of an individual's reported average sleep per day to the nearest hour.
+
+- Sleep Category [`sleep7hr` in dataset] is a categorical variable sorting individuals into whether they reported, on average, sleeping "Less than 7 hours" or "7 hours or more".
+
+- Physical Activity [`exercise` in dataset] is a categorical variable based on whether an individual responded "Yes" or "No" to the question "During the past month, other than your regular job, did you participate in any physical activities or exercises such as running, calisthenics, golf, gardening, or walking for exercise?".
+
+## 4 - Exploratory Analysis
+
+### Research Question 1 - Smoking and BMI
+
+#### Numerical Summary 1: Counts and Proportions of Respondents by Smoking Status \newline
+
+```{r, echo = FALSE}
+smoker_counts <- rbind(summary(brfss$smoker),
+                       summary(brfss$smoker)/length(brfss$smoker))
+rownames(smoker_counts) <- c("Number of Respondents", "Relative Frequency")
+smoker_counts[2,] <- round(smoker_counts[2,], 3)
+smoker_counts
+```
+
+#### Graphical Summary 1: Histogram of Body Mass Index of Respondents \newline
+
+```{r, echo = FALSE}
+ggplot(data = brfss[!is.na(brfss$bmi),], mapping = aes(x = bmi)) +
+  geom_histogram(binwidth = 1, boundary = 0, 
+                 color = "gray80", fill = "lightblue", alpha = 0.8) +
+  geom_segment(x = mean(brfss$bmi, na.rm = TRUE), y = 0, yend = Inf,
+               color = "darkblue", linewidth = 0.4) +
+  annotate("text", 
+           label = paste("mean =", 
+                         as.character(round(mean(brfss$bmi, na.rm = TRUE), 3))),
+           x = mean(brfss$bmi, na.rm = TRUE), y = Inf, 
+           hjust = -0.05, vjust = 1, size = 3) +
+  geom_segment(x = median(brfss$bmi, na.rm = TRUE), y = 0, yend = Inf,
+               color = "darkred", linewidth = 0.4) +
+  annotate("text", 
+           label = paste("median =", 
+                         as.character(round(median(brfss$bmi, na.rm = TRUE), 3))),
+           x = median(brfss$bmi, na.rm = TRUE), y = Inf, 
+           hjust = 1.03, vjust = 1, size = 3) +
+  theme_minimal() +
+  labs(x = "Body Mass Index (kg/m^2)", y = "Number of Respondents")
+```
+
+#### Graphical Summary 2: Box Plots of Body Mass Index by Smoking Status \newline
+
+```{r, echo = FALSE}
+brfss_RQ1 <- brfss |>
+  filter(!is.na(brfss$smoker) & !is.na(brfss$bmi))
+
+ggplot(data = brfss_RQ1, mapping = aes(x = bmi, y = smoker)) +
+  geom_boxplot(outlier.size = 0.3, outlier.alpha = 0.3, fill = "lightblue") +
+  scale_y_discrete(labels = function(x) str_wrap(x, width = 1)) +
+  theme_minimal() +
+  labs(x = "Body Mass Index (kg/m^2)", y = "Smoking Status")
+```
+
+#### Numerical Summary 2: Quantiles, IQR, Mean, and Standard Deviation of BMI by Smoking Status \newline
+
+```{r, echo = FALSE}
+brfss_RQ1 |>
+  group_by(smoker) |>
+  summarize(min = min(bmi), Q1 = quantile(bmi, 0.25),
+            median = median(bmi), Q3 = quantile(bmi, 0.75),
+            max = max(bmi), IQR = IQR(bmi), mean = mean(bmi),
+            SD = sd(bmi))
+```
+
+The majority of the 356,158 individuals in our dataset reported smoking fewer than 100 cigarettes in their lifetime (57.5%). Those that reported smoking at least 100 cigarettes in their life made up 36.7% of respondents, and those that didn't respond or refused to respond to the question made up 5.8% of respondents.
+
+The distribution of Body Mass Index among respondents is skewed right, with a median BMI of 27.41 below the mean BMI of 28.47 (both considered Overweight) and a maximum BMI of 98.43 (considered severely obese) in the dataset. Judging by the box plots and numerical summary, the distribution is fairly similar across smoking categories, with similar medians (around 27), means (around 28), IQR (around 7-8), and standard deviation (around 6-7).
+
+### Research Question 2 - Sleep and Obesity
+
+#### Graphical Summary 1: Bar Chart of Hours of Sleep (per day) by Obesity Status \newline
+
+```{r, echo = FALSE}
+brfss_RQ2 <- brfss |>
+  filter(!is.na(brfss$sleep), !is.na(brfss$bmi_cat))
+
+ggplot(data = brfss_RQ2, mapping = aes(x = sleep, y = after_stat(prop))) +
+  geom_bar(fill = "lightblue") +
+  facet_grid(obesity ~ .) +
+  theme_minimal() +
+  labs(x = "Hours of Sleep (per day)", y = "Relative Frequency")
+```
+
+#### Numerical Summary 1: Quantiles and IQR of Hours of Sleep (per day) by Obesity Status \newline
+
+```{r, echo = FALSE}
+brfss_RQ2 |>
+  group_by(obesity) |>
+  summarize(min = min(sleep), Q1 = quantile(sleep, 0.25),
+            median = median(sleep), Q3 = quantile(sleep, 0.75),
+            max = max(sleep), IQR = IQR(sleep))
+```
+
+#### Numerical Summary 2: Obesity Percentages by Sleep Category
+
+```{r, echo = FALSE}
+sleep_summary <- brfss |>
+  filter(!is.na(sleep7hr), !is.na(bmi_cat)) |>
+  group_by(sleep7hr) |>
+  summarise(
+    total = n(),
+    obese = sum(bmi_cat == "Obese"),
+    percent_obese = round(mean(bmi_cat == "Obese") * 100, 2)
+  )
+sleep_summary
+```
+
+#### Graphical Summary 2: Proportional Stacked Bar Chart of Respondents' Obesity Status by Sleep Category \newline
+
+```{r, echo = FALSE}
+ggplot(brfss_RQ2, aes(x = sleep7hr, fill = obesity)) +
+  geom_bar(position = "fill") +
+  scale_fill_fish_d(option = "Ostracion_whitleyi") +
+  labs(
+    x = "Sleep Duration",
+    y = "Proportion of Respondents",
+    fill = "Obesity Status"
+  ) +
+  theme_minimal()
+```
+
+First, we compared the general distribution of hours of sleep between obese and not obese individuals, with not obese individuals showing a slightly greater proportion of individuals sleeping 7 hours or greater. The quantiles of reported sleep duration were the same for both obesity groups. 
+
+However, after looking at the proportion of individuals classified as obese between sleep categories, we saw that 30.54% of the 212,715 individuals who slept 7 hours or more a night were obese, as opposed to 38.52% of the 97,050 who slept less than 7 hours. The stacked bar chart indicates a similar pattern, indicating a possible association between sleeping insufficiently (\<7 hours a night) and obesity.
+
+### Research Question 3 - Exercise and Obesity
+
+#### Numerical Summary 1: Obesity Rates by Physical Activity \newline
+
+```{r, echo = FALSE}
+exercise_summary <- brfss |>
+  filter(!is.na(exercise), !is.na(bmi_cat)) |>
+  group_by(exercise) |>
+  summarise(
+    total = n(),
+    obese = sum(bmi_cat == "Obese"),
+    percent_obese = round(mean(bmi_cat == "Obese") * 100, 2)
+  )
+exercise_summary
+```
+
+#### Numerical Summary 2: Mean, Median, Standard Deviation, and IQR of BMI by Physical Activity \newline
+
+```{r, echo = FALSE}
+exercise_bmi_summary <- brfss |>
+  filter(!is.na(exercise), !is.na(bmi)) |>
+  group_by(exercise) |>
+  summarise(
+    mean_bmi = round(mean(bmi), 2),
+    median_bmi = round(median(bmi), 2),
+    sd_bmi = round(sd(bmi), 2),
+    IQR_bmi = round(IQR(bmi), 2)
+  )
+exercise_bmi_summary
+```
+
+#### Graphical Summary 1: Horizontal Bar Chart of Obesity Rates by Physical Activity \newline
+
+```{r, echo = FALSE}
+ggplot(exercise_summary,
+       aes(x = exercise, y = percent_obese, fill = exercise)) +
+  geom_col(width = 0.5) +
+  scale_fill_fish_d(option = "Pseudocheilinus_tetrataenia") +
+  coord_flip() +
+  labs(
+    x = "Physical Activity in the Past 30 Days",
+    y = "Percentage Classified as Obese"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+#### Graphical Summary 2: Box Plots of BMI by Physical Activity \newline
+
+```{r, echo = FALSE}
+ggplot(
+  brfss |> filter(!is.na(exercise), !is.na(bmi)),
+  aes(x = exercise, y = bmi)
+) +
+  geom_boxplot(fill = "lightblue", outlier.size = 0.3, outlier.alpha = 0.3) +
+  labs(
+    x = "Physical Activity in the Past 30 Days",
+    y = "BMI (kg/m²)"
+  ) +
+  theme_minimal()
+```
+
+Among respondents who reported participating in physical activity outside of work during the past 30 days, 29.86% were classified as obese, compared to 43.95% of respondents who reported no physical activity. This is a difference of 14.09 percentage points, which is also shown in the horizontal bar chart.
+
+The numerical BMI summaries show that respondents who reported physical activity had a lower mean BMI (27.97) and median BMI (27.12) than those who reported no physical activity (30.18 and 29.04, respectively). The standard deviation and IQR were also lower among respondents who reported physical activity, at 6.05 and 7.21, compared to 7.70 and 9.03 for those who did not. The boxplots show the same pattern, with a higher median and a larger spread in BMI values among respondents who reported no physical activity.
+
+## 5 - Conclusions
+
+Looking at our first research question, the survey data does not indicate a difference in mean BMI between current or former smokers and non-smokers, with all three groups' mean BMI around the total sample's mean BMI of 28.47 kg/m\^2. The BMI distribution, both for the total sample and grouped by smoking status, was centered around the median of 27.41 kg/m\^2 and skewed right. However, the differences in mean BMI between each group may still be statistically significant, especially due to the large sample size, and this cannot be confirmed without further statistical testing.
+
+On the other hand, the survey does indicate that, at least among the population of respondents, there may be an association between obesity status and sleep category. Out of those that reported sleeping 7 or more hours a day, 30.54% of respondents were classified as obese ($BMI \geq 30.00$). However, out of those that slept fewer than 7 hours a day, 38.52% of respondents were classified as obese. This is despite the fact that the distribution and quantiles of sleep hours between obese and non-obese individuals seemed visually fairly similar in the bar chart, although grouping respondents into two sleep categories likely showed a stronger association between sleep and obesity. This may be the most interesting to investigate, as the association between sleep category and obesity is not necessarily obvious (as opposed to physical activity and obesity).
+
+Our analysis shows that physical activity may be associated with obesity among respondents in the 2025 BRFSS dataset. Those who reported participating in physical activity outside of work had lower obesity rates and BMI values than those who did not. This relationship would be interesting to investigate further because the difference in obesity rates between the two groups was relatively large. However, since the data are observational and based on self-reported information, we cannot conclude that physical activity directly causes differences in obesity. Other factors, such as age, diet, and overall health, may also contribute to the differences we observed.
+
+\newpage
+
+## 6 - Data Appendix
+
+```{r, echo=FALSE}
+## R code to create and display summaries in part 1. 
+## This R code will not be printed in the PDF.
+## Remove the ## before all code.
+head(brfss, 15)
+```
+
+\newpage
+
+## 7 - References
+
+Emmerich, Samuel D., et al. “Obesity and Severe Obesity Prevalence in Adults: United States, August 2021–August 2023.” NCHS Data Brief, no. 508, Centers for Disease Control and Prevention, Sept. 2024, <https://www.cdc.gov/nchs/products/databriefs/db508.htm.>
+
+Ng, Amanda E., et al. “Short Sleep Duration and Sleep Difficulties Among Adults: United States, 2024.” NCHS Data Brief, no. 559, Centers for Disease Control and Prevention, Apr. 2026, <https://www.cdc.gov/nchs/products/databriefs/db559.htm.>
+
+VanFrank, Brenna, et al. “Adult Smoking Cessation — United States, 2022.” Morbidity and Mortality Weekly Report, vol. 73, no. 29, 25 July 2024, pp. 633–641, Centers for Disease Control and Prevention, <https://www.cdc.gov/mmwr/volumes/73/wr/mm7329a1.htm.>
+
+Centers for Disease Control and Prevention. “2025 BRFSS Survey Data and Documentation.” Behavioral Risk Factor Surveillance System, 9 Sept. 2026, <https://www.cdc.gov/brfss/annual_data/annual_2025.html.>
